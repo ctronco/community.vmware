@@ -6,7 +6,7 @@
 
 from __future__ import absolute_import, division, print_function
 
-from plugins.modules.vmware_datastore_info import PyVmomiHelper
+#from plugins.modules.vmware_datastore_info import PyVmomiHelper
 __metaclass__ = type
 
 
@@ -54,11 +54,6 @@ options:
       - '   folder: /folder1/datacenter1/datastore/folder2'
       required: False
       type: str
-    enable_sdrs:
-    automation_level:
-    keep_vmdks_together:
-    loadbalance_interval:
-    enable_io_loadbalance:
 extends_documentation_fragment:
 - community.vmware.vmware.documentation
 
@@ -137,7 +132,7 @@ class VMwareDatastoreClusterInfo(PyVmomi):
         super(VMwareDatastoreClusterInfo, self).__init__(module)
         self.folder= self.module.params['folder']
         #self.datacenter =self.module.params['datacenter']
-        self.datastore_Cluster_name = self.module.params['datastore_cluster_name']
+       # self.datastore_cluster_name = self.module.params['datastore_cluster_name']
 
         if self.folder:
             self.folder_obj = self.content.searchIndex.FindByInventoryPath(self.folder)
@@ -179,7 +174,7 @@ class PyVmomiHelper(PyVmomi):
         self.cache = PyVmomiCache(self.content, dc_name=self.params['datacenter'])
 
     def lookup_dscluster(self, confine_to_datacenter):
-        """ Get datastorecluster vCenter server """
+        """ Get datastore cluster vCenter server """
         datastore_clusters = self.cache.get_all_objs(self.content, [vim.StoragePod], confine_to_datacenter)
         return datastore_clusters
 
@@ -197,7 +192,7 @@ def main():
     argument_spec.update(
         dict(
             datacenter_name=dict(type='str', required=False, aliases=['datacenter']),
-            datastore_cluster_name=dict(type='str', required=True),
+            datastore_cluster_name=dict(type='str', required=False),
             folder=dict(type='str', required=False),
         )
     )
@@ -215,14 +210,14 @@ def main():
     pyv = PyVmomiHelper(module)
     if module.params['cluster']:
         dxs = "f"
-    else module.params['datacenter']:
+    elif module.params['datacenter']:
        dxs = "g"
     else: 
        dxs = "h"
 
 
-    datastore_cluster_mgr = VMwareDatastoreClusterManager(module)
-    datastore_cluster_mgr.ensure()
+   # datastore_cluster_mgr = VMwareDatastoreClusterManager(module)
+   # datastore_cluster_mgr.ensure()
 
 
 if __name__ == '__main__':
