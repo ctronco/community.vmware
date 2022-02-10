@@ -5,6 +5,7 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
+from re import M
 
 #from plugins.modules.vmware_datastore_info import PyVmomiHelper
 __metaclass__ = type
@@ -122,7 +123,7 @@ except ImportError:
     pass
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.community.vmware.plugins.module_utils.vmware import PyVmomi, vmware_argument_spec, wait_for_task, find_datastore_cluster_by_name
+from ansible_collections.community.vmware.plugins.module_utils.vmware import PyVmomi, vmware_argument_spec, wait_for_task, find_datastore_cluster_by_name,get_all_objs,get_parent_datacenter
 from ansible.module_utils._text import to_native
 from ansible_collections.community.vmware.plugins.module_utils.vmware_rest_client import VmwareRestClient
 
@@ -165,13 +166,70 @@ class VMwareDatastoreClusterInfo(PyVmomi):
                         continue
                 else:
                     dcs.append(dc_obj.obj)
+    def build_datastore_cluster_list(self,datastore_cluster_list):
+        """ build list of datastore clusters and relevant properties"""
+        dscs = list()
+        for dsc in datastore_cluster_list:
+            temp_dsc =dict()
+            summary = dsc.summary
+            cfg = dsc.podStorageDrsEntry.storageDrsConfig
+            temp_dsc['name'] = dsc.name
+            temp_dsc['capacity'] = summary.capacity
+            temp_dsc['free_space'] = summary.freeSpace
+            temp_dsc['load_balance_interval'] = cfg.podConfig.loadBalanceInterval
+            temp_dsc['load_balance_enabled'] = cfg.podConfig.ioLoadBalanceEnabled
+            temp_dsc['sdrs_enabled'] = cfg.podConfig.enabled
+            temp_dsc['sdrs_mode'] = cfg.podConfig.defaultVmBehavior
+            temp_dsc['datastores'] = list()
+            for ds in dsc.childEntity:
+                ds_info = dict()
+                ds_info['name'] = ds.name
+                ds_info['free_space'] = ds.summary.freeSpace
+                ds_info['capacity'] = ds.summary.capacity
+                ds_info['type'] = ds.summary.type
+                # want to add moid at some point.... how? 
+                temp_dsc['datastores'].extend([ds_info])
+                
+            json_dsc = self.to_json(temp_dsc)
+            dscs.extend([json_dsc])
+        return dscs
+            
+
+
+
+class PyVmomiCache(object):
+    """ This class caches references to objects which are requested multiples times but not modified """
+
+    def __init__(self, content, dc_name=None):
+        self.content = content
+        self.dc_name = dc_name
+        self.clusters = {}
+        self.parent_datacenters = {}
+
+    def get_all_objs(self, content, types, confine_to_datacenter=True):
+        """ Wrapper around get_all_objs to set datacenter context """
+        objects = get_all_objs(content, types)
+        if confine_to_datacenter:
+            if hasattr(objects, 'items'):
+                # resource pools come back as a dictionary
+                for k, v in tuple(objects.items()):
+                    parent_dc = get_parent_datacenter(k)
+                    if parent_dc.name != self.dc_name:
+                        del objects[k]
+            else:
+                # everything else should be a list
+                objects = [x for x in objects if get_parent_datacenter(x).name == self.dc_name]
+
+        return objects
+
+
 
 class PyVmomiHelper(PyVmomi):
     """ This class gets datastore_clusters """
 
     def __init__(self, module):
         super(PyVmomiHelper, self).__init__(module)
-        self.cache = PyVmomiCache(self.content, dc_name=self.params['datacenter'])
+        self.cache = PyVmomiCache(self.content, dc_name=self.params['datacenter_name'])
 
     def lookup_dscluster(self, confine_to_datacenter):
         """ Get datastore cluster vCenter server """
@@ -193,6 +251,7 @@ def main():
         dict(
             datacenter_name=dict(type='str', required=False, aliases=['datacenter']),
             datastore_cluster_name=dict(type='str', required=False),
+            #cluster=dict(type='str',required=False),
             folder=dict(type='str', required=False),
         )
     )
@@ -208,16 +267,18 @@ def main():
     )
     result = dict(changed=False)
     pyv = PyVmomiHelper(module)
-    if module.params['cluster']:
-        dxs = "f"
-    elif module.params['datacenter']:
-       dxs = "g"
+#    if module.params['cluster']:
+#        dxs = pyv.lookup_dscluster_by_cluster()
+    if module.params['datacenter_name']:
+       dxs = pyv.lookup_dscluster(confine_to_datacenter=True)
     else: 
-       dxs = "h"
+       dxs = pyv.lookup_dscluster(confine_to_datacenter=False)
 
+    vmware_dscluster = VMwareDatastoreClusterInfo(module)
+    datastore_clusters = vmware_dscluster.build_datastore_cluster_list(dxs)
 
-   # datastore_cluster_mgr = VMwareDatastoreClusterManager(module)
-   # datastore_cluster_mgr.ensure()
+    result['datastore_clusters'] = datastore_clusters
+    module.exit_json(**result)
 
 
 if __name__ == '__main__':
