@@ -133,7 +133,7 @@ class VMwareDatastoreClusterInfo(PyVmomi):
         super(VMwareDatastoreClusterInfo, self).__init__(module)
         self.folder= self.module.params['folder']
         #self.datacenter =self.module.params['datacenter']
-       # self.datastore_cluster_name = self.module.params['datastore_cluster_name']
+        self.datastore_cluster_name = self.module.params['datastore_cluster_name']
 
         if self.folder:
             self.folder_obj = self.content.searchIndex.FindByInventoryPath(self.folder)
@@ -175,7 +175,11 @@ class VMwareDatastoreClusterInfo(PyVmomi):
             cfg = dsc.podStorageDrsEntry.storageDrsConfig
             temp_dsc['name'] = dsc.name
             temp_dsc['capacity'] = summary.capacity
+            temp_dsc['capacity_gb'] = round(summary.capacity/1024**3,2)
+            temp_dsc['capacity_tb'] = round(summary.capacity/1024**4,2)
             temp_dsc['free_space'] = summary.freeSpace
+            temp_dsc['free_space_gb'] = round(summary.freeSpace/1024**3,2)
+            temp_dsc['free_space_tb'] = round(summary.freeSpace/1024**4,2)
             temp_dsc['load_balance_interval'] = cfg.podConfig.loadBalanceInterval
             temp_dsc['load_balance_enabled'] = cfg.podConfig.ioLoadBalanceEnabled
             temp_dsc['sdrs_enabled'] = cfg.podConfig.enabled
@@ -185,7 +189,9 @@ class VMwareDatastoreClusterInfo(PyVmomi):
                 ds_info = dict()
                 ds_info['name'] = ds.name
                 ds_info['free_space'] = ds.summary.freeSpace
+                ds_info['free_space_gb'] = round(ds.summary.freeSpace/(1024**3),2)                
                 ds_info['capacity'] = ds.summary.capacity
+                ds_info['capacity_gb'] = round(ds.summary.capacity/(1024**3),2)
                 ds_info['type'] = ds.summary.type
                 # want to add moid at some point.... how? 
                 temp_dsc['datastores'].extend([ds_info])
@@ -240,9 +246,10 @@ class PyVmomiHelper(PyVmomi):
         """ Get datastorecluster(s) per computecluster """
         cluster = find_datastore_cluster_by_name(self.content, self.params['datastore_cluster_name'])
         if not cluster:
-            self.module.fail_json(msg='Failed to find cluster "%(cluster)s"' % self.params)
-        c_dc = cluster.datastore
-        return c_dc
+            self.module.fail_json(msg='Failed to find datastore cluster "%(datastore_cluster_name)s"' % self.params)
+        return [cluster]
+#        c_dc = cluster.datastore
+#        return c_dc
 
 
 def main():
@@ -267,9 +274,9 @@ def main():
     )
     result = dict(changed=False)
     pyv = PyVmomiHelper(module)
-#    if module.params['cluster']:
-#        dxs = pyv.lookup_dscluster_by_cluster()
-    if module.params['datacenter_name']:
+    if module.params['datastore_cluster_name']:
+        dxs = pyv.lookup_dscluster_by_cluster()
+    elif module.params['datacenter_name']:
        dxs = pyv.lookup_dscluster(confine_to_datacenter=True)
     else: 
        dxs = pyv.lookup_dscluster(confine_to_datacenter=False)
