@@ -246,6 +246,10 @@ def get_parent_datacenter(obj):
 def find_datastore_by_name(content, datastore_name, datacenter_name=None):
     return find_object_by_name(content, datastore_name, [vim.Datastore], datacenter_name)
 
+#def find_datastore_cluster_by_name(content,datastore_cluster_name, datacenter_name=None, folder=None):
+def find_datastore_cluster_by_name(content,datastore_cluster_name, datacenter_name=None):
+    return find_object_by_name(content,datastore_cluster_name,[vim.StoragePod], datacenter_name)
+
 
 def find_folder_by_name(content, folder_name):
     return find_object_by_name(content, folder_name, [vim.Folder])
